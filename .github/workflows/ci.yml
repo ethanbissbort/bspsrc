@@ -3,14 +3,22 @@ name: CI
 # Release packaging runs from application-packaging.yml on v* tags.
 # This workflow only builds and tests, so regressions are caught on
 # ordinary commits and pull requests rather than at release time.
+# Pushes to a branch with an open pull request are already covered by the
+# pull_request event, so push only triggers on master to avoid running the
+# same commit twice.
 on:
   push:
     branches:
-      - '**'
+      - master
   pull_request:
 
 permissions:
   contents: read
+
+# A new push supersedes an in-flight run for the same ref.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   test:
