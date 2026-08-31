@@ -84,29 +84,52 @@ public class DecompileTaskModel {
 		stateListeners.forEach(consumer -> consumer.accept(state));
 	}
 
+	/**
+	 * Cancels the running decompilation.
+	 * <p>
+	 * Entries that haven't started yet are dropped, entries that are being decompiled right now
+	 * stop at their next task boundary, which can take a moment for a big map. Entries that
+	 * already finished keep their vmf files, half written ones are deleted.
+	 * <p>
+	 * Has to be called on the EDT and does nothing if the decompilation already ended.
+	 */
+	public void cancel() {
+		this.worker.cancelDecompiling();
+	}
+
 	public void close() {
-		this.worker.cancel(true);
+		cancel();
 	}
 
 	private class DecompileWorker extends SwingWorker<Void, BspSource.Signal> {
 
-		private final BspSourceConfig config;
 		private final List<BspFileEntry> entries;
+		/**
+		 * Created up front, so {@link #cancelDecompiling()} can reach it even if the worker
+		 * hasn't started running yet.
+		 */
+		private final BspSource bspSource;
 
 		private DecompileWorker(BspSourceConfig config, List<BspFileEntry> entries) {
-			this.config = requireNonNull(config);
 			this.entries = List.copyOf(entries);
+			this.bspSource = new BspSource(requireNonNull(config), this.entries);
 		}
 
 		@Override
 		protected Void doInBackground() throws InterruptedException {
-			var bspSource = new BspSource(config, entries);
-
 			try (var scope0 = Log4jUtil.configureDecompilationLogFileAppender(bspSource.getEntryUuids(), entries);
 			     var scope1 = Log4jUtil.configureDecompilationDocumentAppenders(bspSource.getEntryUuids(), taskLogs)) {
 				bspSource.run(this::publish);
 			}
 			return null;
+		}
+
+		private void cancelDecompiling() {
+			// stops the decompiler itself. Without this, its executor would keep working through
+			// the remaining entries after we stopped listening
+			bspSource.cancel();
+			// interrupts doInBackground, so it stops waiting for the signals that are still missing
+			this.cancel(true);
 		}
 
 		@Override
@@ -128,6 +151,11 @@ public class DecompileTaskModel {
                         taskIndex = taskSig.index();
                         state = Task.State.FAILED;
                     }
+                    case BspSource.Signal.TaskCancelled taskSig -> {
+                        taskIndex = taskSig.index();
+                        // the entry was abandoned, it didn't fail, so it must not show up as an error
+                        state = Task.State.CANCELLED;
+                    }
                     case null, default -> throw new RuntimeException("Not reachable");
                 }
 
@@ -144,8 +172,12 @@ public class DecompileTaskModel {
 
 		@Override
 		protected void done() {
-			if (isCancelled())
+			if (isCancelled()) {
+				// cancelling is a clean end, not a failure. Without this the model would stay
+				// 'Running' forever and any ui bound to it would keep offering to cancel
+				setState(new DecompileTaskModel.State.Finished(null));
 				return;
+			}
 
 			Throwable failureCause = null;
 			try {

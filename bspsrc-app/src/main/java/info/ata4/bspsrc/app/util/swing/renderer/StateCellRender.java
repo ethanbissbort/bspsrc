@@ -27,6 +27,7 @@ public class StateCellRender extends DefaultTableCellRenderer {
 				case RUNNING -> Icons.PENDING_ICON.derive(rowHeight, rowHeight);
 				case FINISHED -> Icons.SUCCESS_ICON.derive(rowHeight, rowHeight);
 				case FAILED -> Icons.FAILED_ICON.derive(rowHeight, rowHeight);
+				case CANCELLED -> Icons.WARNING_ICON.derive(rowHeight, rowHeight);
 			};
 
 			cell.setText(null);

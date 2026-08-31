@@ -10,6 +10,7 @@ public record Task(
 		PENDING,
 		RUNNING,
 		FINISHED,
-		FAILED
+		FAILED,
+		CANCELLED
 	}
 }
