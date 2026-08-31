@@ -87,8 +87,9 @@ public class BspSourceCliCommand implements Callable<Integer> {
 		private boolean noOccluderEnts;
 		@Option(names = "--no_ladders", description = "Don't write func_ladder entities.")
 		private boolean noLadderEnts;
-		@Option(names = "--no_visclusters", description = "Don't write func_viscluster entities.")
-		private boolean noVisClusterEnts;
+		@Option(names = "--visclusters", description = "Try to reconstruct func_viscluster entities. "
+				+ "Off by default: the result is inaccurate most of the time and needs manual cleanup to be useful.")
+		private boolean visClusterEnts;
 		@Option(names = "--no_rotfix", description = "Don't fix instance entity brush rotations for Hammer.")
 		private boolean noInstanceEntityRotationFix;
 		@Option(names = "--force_manual_areaportal", description = "Force manual entity mapping for areaportal entities.")
@@ -191,6 +192,11 @@ public class BspSourceCliCommand implements Callable<Integer> {
 			return ExitCode.USAGE;
 		}
 
+		// Two different bsp files decompiling into the same vmf file would have their tasks
+		// write into that file simultaneously, silently producing a corrupt vmf.
+		if (hasOutputCollisions(entries))
+			return ExitCode.USAGE;
+
 		var bspsrc = new BspSource(config, entries);
 		var failedTasks = new AtomicInteger();
 
@@ -235,7 +241,7 @@ public class BspSourceCliCommand implements Callable<Integer> {
 		config.writeAreaportals = !entityOpts.noAreaportalEnts;
 		config.writeOccluders = !entityOpts.noOccluderEnts;
 		config.writeLadders = !entityOpts.noLadderEnts;
-		config.writeVisClusters = !entityOpts.noVisClusterEnts;
+		config.writeVisClusters = entityOpts.visClusterEnts;
 		config.fixEntityRot = !entityOpts.noInstanceEntityRotationFix;
 		config.apForceManualMapping = entityOpts.forceAreaportalManualEntMapping;
 		config.detailMerge = entityOpts.mergeFunctDetails;
@@ -267,7 +273,7 @@ public class BspSourceCliCommand implements Callable<Integer> {
 		return config;
 	}
 
-	private Set<BspFileEntry> getEntries() throws IOException {
+	private List<BspFileEntry> getEntries() throws IOException {
 		List<Path> bspPaths;
 		if (useFileLists) {
 			// it could be so easy...
@@ -289,7 +295,11 @@ public class BspSourceCliCommand implements Callable<Integer> {
 			bspPaths = paths;
 		}
 
-		var fileSet = new HashSet<BspFileEntry>();
+		// Keyed by canonical bsp path, so the very same file specified more than once - as
+		// 'map.bsp' and './map.bsp', or both explicitly and through a directory - is silently
+		// decompiled just once. Insertion ordered, with the first occurrence winning, so the
+		// resulting order doesn't depend on hashing.
+		var fileMap = new LinkedHashMap<Path, BspFileEntry>();
 		for (Path path : bspPaths) {
 			if (Files.isDirectory(path)) {
 				PathMatcher bspPathMatcher = path.getFileSystem().getPathMatcher("glob:**.bsp");
@@ -298,17 +308,72 @@ public class BspSourceCliCommand implements Callable<Integer> {
 							.filter(Files::isRegularFile)
 							.filter(bspPathMatcher::matches)
 							.map(bspPath -> new BspFileEntry(bspPath, BspPathUtil.defaultVmfPath(bspPath, outputPath)))
-							.forEach(fileSet::add);
+							.forEachOrdered(entry -> fileMap.putIfAbsent(canonicalPath(entry.getBspFile()), entry));
 				}
 			} else {
 				Path vmfPath = bspPaths.size() > 1 || outputPath == null
 						? BspPathUtil.defaultVmfPath(path, outputPath)
 						: outputPath;
 
-				fileSet.add(new BspFileEntry(path, vmfPath));
+				fileMap.putIfAbsent(canonicalPath(path), new BspFileEntry(path, vmfPath));
 			}
 		}
 
-		return fileSet;
+		return List.copyOf(fileMap.values());
+	}
+
+	/**
+	 * Checks if multiple, distinct bsp files would be decompiled into the same vmf file.
+	 * <p>
+	 * Decompile tasks run in parallel, so two tasks sharing an output path would write into that
+	 * file at the same time, interleaving into a corrupt vmf without reporting an error. Every
+	 * such collision is logged, naming the shared output and all bsp files involved.
+	 *
+	 * @return true if at least one collision was found
+	 */
+	private static boolean hasOutputCollisions(List<BspFileEntry> entries) {
+		var entriesByOutput = new LinkedHashMap<Path, List<BspFileEntry>>();
+		for (BspFileEntry entry : entries) {
+			entriesByOutput
+					.computeIfAbsent(canonicalPath(entry.getVmfFile()), key -> new ArrayList<>())
+					.add(entry);
+		}
+
+		boolean collision = false;
+		for (var outputEntry : entriesByOutput.entrySet()) {
+			List<BspFileEntry> collidingEntries = outputEntry.getValue();
+			if (collidingEntries.size() < 2)
+				continue;
+
+			collision = true;
+			L.error("Output file collision: {} bsp files would all be decompiled into '{}':",
+					collidingEntries.size(), outputEntry.getKey());
+			for (BspFileEntry collidingEntry : collidingEntries)
+				L.error("    '{}'", collidingEntry.getBspFile());
+		}
+
+		if (collision) {
+			L.error("Aborting without decompiling anything, as these files would overwrite each other. "
+					+ "Decompile them separately or into separate output directories (-o).");
+		}
+
+		return collision;
+	}
+
+	/**
+	 * Resolves a path into a canonical form, to compare paths by the file they identify rather
+	 * than by how they happen to be spelled.
+	 * <p>
+	 * {@link Path#toRealPath} is preferred, because it also resolves symlinks and, on case
+	 * insensitive file systems, the actual case of the file name. It requires the file to exist
+	 * though, so for files that don't (yet) exist - most notably the vmf output paths, but also
+	 * bsp paths the user mistyped - we fall back to a purely lexical absolute path.
+	 */
+	private static Path canonicalPath(Path path) {
+		try {
+			return path.toRealPath();
+		} catch (IOException e) {
+			return path.toAbsolutePath().normalize();
+		}
 	}
 }
