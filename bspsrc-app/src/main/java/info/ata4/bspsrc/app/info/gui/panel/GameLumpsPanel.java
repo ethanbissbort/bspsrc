@@ -33,6 +33,9 @@ public class GameLumpsPanel extends JPanel {
 	public final JButton btnExtract = new JButton("Extract");
 	public final JButton btnExtractAll = new JButton("Extract all");
 
+	private boolean hasGameLumps = false;
+	private boolean busy = false;
+
 	public GameLumpsPanel(
 			Consumer<Set<Integer>> onExtractLumps
 	) {
@@ -77,7 +80,21 @@ public class GameLumpsPanel extends JPanel {
 	public void update(BspInfoModel model) {
 		tableModel.setData(model.getGameLumps());
 
-		boolean buttonsEnabled = !model.getGameLumps().isEmpty();
+		hasGameLumps = !model.getGameLumps().isEmpty();
+		updateButtonsEnabled();
+	}
+
+	/**
+	 * Disables the extraction buttons while a background task is running, so no second
+	 * extraction can be started on top of it.
+	 */
+	public void setBusy(boolean busy) {
+		this.busy = busy;
+		updateButtonsEnabled();
+	}
+
+	private void updateButtonsEnabled() {
+		boolean buttonsEnabled = hasGameLumps && !busy;
 		btnExtract.setEnabled(buttonsEnabled);
 		btnExtractAll.setEnabled(buttonsEnabled);
 	}

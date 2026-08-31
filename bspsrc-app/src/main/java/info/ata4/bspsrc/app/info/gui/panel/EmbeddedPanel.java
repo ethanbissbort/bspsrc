@@ -30,6 +30,9 @@ public class EmbeddedPanel extends JPanel {
 	public final JButton btnExtractAll = new JButton("Extract all");
 	public final JButton btnExtractRaw = new JButton("Extract raw Zip file");
 
+	private boolean hasEmbeddedFiles = false;
+	private boolean busy = false;
+
 	public EmbeddedPanel(
 			Consumer<Set<Integer>> onExtractFiles,
 			Runnable onExtractRaw
@@ -74,9 +77,23 @@ public class EmbeddedPanel extends JPanel {
 	}
 
 	public void update(BspInfoModel model) {
-		 tableModel.setData(model.getEmbeddedInfos());
+		tableModel.setData(model.getEmbeddedInfos());
 
-		boolean buttonsEnabled = !model.getEmbeddedInfos().isEmpty();
+		hasEmbeddedFiles = !model.getEmbeddedInfos().isEmpty();
+		updateButtonsEnabled();
+	}
+
+	/**
+	 * Disables the extraction buttons while a background task is running, so no second
+	 * extraction can be started on top of it.
+	 */
+	public void setBusy(boolean busy) {
+		this.busy = busy;
+		updateButtonsEnabled();
+	}
+
+	private void updateButtonsEnabled() {
+		boolean buttonsEnabled = hasEmbeddedFiles && !busy;
 		btnExtract.setEnabled(buttonsEnabled);
 		btnExtractAll.setEnabled(buttonsEnabled);
 		btnExtractRaw.setEnabled(buttonsEnabled);

@@ -7,13 +7,13 @@ import info.ata4.bspsrc.app.util.log.Log4jUtil;
 import info.ata4.bspsrc.app.util.log.plugins.DialogAppender;
 import info.ata4.bspsrc.app.util.swing.FileExtensionFilter;
 import info.ata4.bspsrc.decompiler.BspSource;
-import info.ata4.bspsrc.lib.exceptions.BspException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import javax.swing.*;
 import java.awt.*;
 import java.awt.datatransfer.DataFlavor;
+import java.awt.datatransfer.Transferable;
 import java.awt.datatransfer.UnsupportedFlavorException;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
@@ -26,6 +26,7 @@ import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.ExecutionException;
 
 import static info.ata4.bspsrc.app.info.gui.Util.wrapWithAlign;
 import static info.ata4.bspsrc.app.util.swing.GridBagConstraintsBuilder.Anchor.FIRST_LINE_START;
@@ -42,6 +43,8 @@ public class BspInfoFrame extends JFrame {
 	public static final String NAME = "BSPInfo";
 	public static final String VERSION = BspSource.VERSION;
 
+	private static final String STATUS_IDLE = "Ready";
+
 	private final BspInfoModel model;
 
 	private final JFileChooser fileChooser = new JFileChooser();
@@ -57,6 +60,16 @@ public class BspInfoFrame extends JFrame {
 	private final DependenciesPanel dependenciesPanel = new DependenciesPanel();
 	private final EmbeddedPanel embeddedPanel = new EmbeddedPanel(this::extractFiles, this::extractFilesRaw);
 	private final ProtectionPanel protectionPanel = new ProtectionPanel();
+
+	private final JMenuItem menuItemOpenFile = new JMenuItem("Open");
+	private final JLabel lblStatus = new JLabel(STATUS_IDLE);
+	private final JProgressBar prgBusy = new JProgressBar();
+
+	/**
+	 * Whether a background task is currently running. Only ever read and written on the
+	 * event dispatch thread.
+	 */
+	private boolean busy = false;
 
 
 	public BspInfoFrame(BspInfoModel model) {
@@ -93,7 +106,11 @@ public class BspInfoFrame extends JFrame {
 		tabbedPane.addTab("Embedded files", embeddedPanel);
 		tabbedPane.addTab("Protection", wrappedProtectionPanel);
 
-		setContentPane(tabbedPane);
+		var contentPane = new JPanel(new BorderLayout());
+		contentPane.add(tabbedPane, BorderLayout.CENTER);
+		contentPane.add(createStatusBar(), BorderLayout.PAGE_END);
+
+		setContentPane(contentPane);
 		initMenuBar();
 		initTransferHandler();
 
@@ -121,8 +138,21 @@ public class BspInfoFrame extends JFrame {
 		});
 	}
 
+	private JComponent createStatusBar() {
+		// none of the background tasks can report any meaningful progress, so all we show
+		// is an indeterminate progress bar while one of them is running
+		prgBusy.setIndeterminate(true);
+		prgBusy.setPreferredSize(new Dimension(120, 12));
+		prgBusy.setVisible(false);
+
+		var statusBar = new JPanel(new BorderLayout(8, 0));
+		statusBar.setBorder(BorderFactory.createEmptyBorder(2, 8, 4, 8));
+		statusBar.add(lblStatus, BorderLayout.CENTER);
+		statusBar.add(prgBusy, BorderLayout.LINE_END);
+		return statusBar;
+	}
+
 	private void initMenuBar() {
-		var menuItemOpenFile = new JMenuItem("Open");
 		menuItemOpenFile.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_O, InputEvent.CTRL_DOWN_MASK));
 		menuItemOpenFile.addActionListener(e -> {
 			int result = fileChooser.showOpenDialog(this);
@@ -131,15 +161,7 @@ public class BspInfoFrame extends JFrame {
 
 			lumpDstChooser.setCurrentDirectory(fileChooser.getCurrentDirectory());
 
-			setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
-
-			try {
-				model.load(fileChooser.getSelectedFile().toPath());
-			} catch (BspException | IOException ex) {
-				L.error("Error occurred loading file", ex);
-			} finally {
-				setCursor(Cursor.getDefaultCursor());
-			}
+			load(fileChooser.getSelectedFile().toPath());
 		});
 
 		var menuFile = new JMenu("File");
@@ -155,24 +177,47 @@ public class BspInfoFrame extends JFrame {
 		setTransferHandler(new TransferHandler() {
 			@Override
 			public boolean canImport(TransferSupport support) {
-				return Arrays.stream(support.getDataFlavors())
+				// don't accept another file while we're still busy with the last one
+				return !busy && Arrays.stream(support.getDataFlavors())
 						.anyMatch(DataFlavor::isFlavorJavaFileListType);
 			}
 
 			@Override
 			public boolean importData(TransferSupport support) {
-				try {
-					List<File> files = (List<File>) support.getTransferable()
-							.getTransferData(DataFlavor.javaFileListFlavor);
+				if (!canImport(support))
+					return false;
 
-					model.load(files.get(files.size() - 1).toPath());
-					return true;
-				} catch (UnsupportedFlavorException | BspException | IOException e) {
+				List<File> files;
+				try {
+					files = getDroppedFiles(support.getTransferable());
+				} catch (UnsupportedFlavorException | IOException e) {
 					L.warn("Error in drag and drop", e);
 					return false;
 				}
+
+				if (files.isEmpty())
+					return false;
+
+				load(files.get(files.size() - 1).toPath());
+				return true;
 			}
 		});
+	}
+
+	/**
+	 * Returns all files of a drag and drop transfer.
+	 * <p>
+	 * {@link DataFlavor#javaFileListFlavor} is only specified to transfer a {@link List},
+	 * not a {@code List<File>}, so every element is checked individually instead of doing
+	 * an unchecked cast of the whole list.
+	 */
+	private static List<File> getDroppedFiles(Transferable transferable)
+			throws UnsupportedFlavorException, IOException {
+		var data = (List<?>) transferable.getTransferData(DataFlavor.javaFileListFlavor);
+		return data.stream()
+				.filter(File.class::isInstance)
+				.map(File.class::cast)
+				.toList();
 	}
 
 	private void onChanges() {
@@ -185,23 +230,29 @@ public class BspInfoFrame extends JFrame {
 		protectionPanel.update(model);
 	}
 
+	/**
+	 * Loads the specified bsp file in the background, keeping the window responsive.
+	 */
+	private void load(Path bspFile) {
+		if (busy)
+			return;
+
+		setBusy("Loading %s...".formatted(bspFile.getFileName()));
+
+		model.load(bspFile, failureCause -> {
+			setIdle();
+
+			if (failureCause != null)
+				showError("Error occurred loading file", failureCause);
+		});
+	}
+
 	private void extractLumps(Set<Integer> lumpIndices) {
 		Path lumpDst = chooseDstDialog(lumpDstChooser);
 		if (lumpDst == null)
 			return;
 
-		setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
-
-		try {
-			model.extractLumps(lumpIndices, lumpDst);
-		} catch (IOException e) {
-			L.error("Error occurred extracting lump(s)", e);
-			return;
-		} finally {
-			setCursor(Cursor.getDefaultCursor());
-		}
-
-		JOptionPane.showMessageDialog(this, "Successfully extracted lump(s).");
+		extract("lump(s)", () -> model.extractLumps(lumpIndices, lumpDst));
 	}
 
 	private void extractGameLumps(Set<Integer> lumpIndices) {
@@ -209,18 +260,7 @@ public class BspInfoFrame extends JFrame {
 		if (lumpDst == null)
 			return;
 
-		setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
-
-		try {
-			model.extractGameLumps(lumpIndices, lumpDst);
-		} catch (IOException e) {
-			L.error("Error occurred extracting game lump(s)", e);
-			return;
-		} finally {
-			setCursor(Cursor.getDefaultCursor());
-		}
-
-		JOptionPane.showMessageDialog(this, "Successfully extracted game lump(s).");
+		extract("game lump(s)", () -> model.extractGameLumps(lumpIndices, lumpDst));
 	}
 
 	private void extractFiles(Set<Integer> fileIndices) {
@@ -228,18 +268,7 @@ public class BspInfoFrame extends JFrame {
 		if (filesDst == null)
 			return;
 
-		setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
-
-		try {
-			model.extractEmbeddedFiles(fileIndices, filesDst);
-		} catch (IOException e) {
-			L.error("Error occurred extracting embedded file(s)", e);
-			return;
-		} finally {
-			setCursor(Cursor.getDefaultCursor());
-		}
-
-		JOptionPane.showMessageDialog(this, "Successfully extracted embedded file(s).");
+		extract("embedded file(s)", () -> model.extractEmbeddedFiles(fileIndices, filesDst));
 	}
 
 	private void extractFilesRaw() {
@@ -247,18 +276,95 @@ public class BspInfoFrame extends JFrame {
 		if (filesDst == null)
 			return;
 
-		setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
+		extract("embedded files", () -> model.extractEmbeddedFilesRaw(filesDst));
+	}
 
-		try {
-			model.extractEmbeddedFilesRaw(filesDst);
-		} catch (IOException e) {
-			L.error("Error occurred extracting embedded files", e);
+	/**
+	 * Runs an extraction task in the background, keeping the window responsive, and reports
+	 * its outcome to the user.
+	 *
+	 * @param what what is being extracted, used in the status and result messages
+	 * @param task the blocking extraction, executed on a background thread
+	 */
+	private void extract(String what, ExtractionTask task) {
+		if (busy)
 			return;
-		} finally {
-			setCursor(Cursor.getDefaultCursor());
-		}
 
-		JOptionPane.showMessageDialog(this, "Successfully extracted embedded files.");
+		setBusy("Extracting %s...".formatted(what));
+
+		new SwingWorker<Void, Void>() {
+			@Override
+			protected Void doInBackground() throws IOException {
+				task.run();
+				return null;
+			}
+
+			@Override
+			protected void done() {
+				setIdle();
+
+				Throwable failureCause = null;
+				try {
+					get();
+				} catch (InterruptedException e) {
+					failureCause = e;
+				} catch (ExecutionException e) {
+					failureCause = e.getCause();
+				}
+
+				if (failureCause == null)
+					JOptionPane.showMessageDialog(
+							BspInfoFrame.this,
+							"Successfully extracted %s.".formatted(what)
+					);
+				else
+					showError("Error occurred extracting %s".formatted(what), failureCause);
+			}
+		}.execute();
+	}
+
+	/**
+	 * Blocks every action that would start another background task and shows that we're
+	 * working on something.
+	 */
+	private void setBusy(String status) {
+		busy = true;
+		lblStatus.setText(status);
+		prgBusy.setVisible(true);
+		updateActionsEnabled();
+	}
+
+	private void setIdle() {
+		busy = false;
+		lblStatus.setText(STATUS_IDLE);
+		prgBusy.setVisible(false);
+		updateActionsEnabled();
+	}
+
+	private void updateActionsEnabled() {
+		menuItemOpenFile.setEnabled(!busy);
+		lumpsPanel.setBusy(busy);
+		gameLumpsPanel.setBusy(busy);
+		embeddedPanel.setBusy(busy);
+	}
+
+	/**
+	 * Reports a failed background task to the user.
+	 * <p>
+	 * Logged below {@code ERROR} on purpose: the {@link DialogAppender} installed by
+	 * {@link #initErrorDialog()} turns every logged error into a dialog of its own, which
+	 * would stack a second, redundant one on top of this.
+	 */
+	private void showError(String message, Throwable cause) {
+		L.warn(message, cause);
+
+		var detail = cause.getLocalizedMessage() != null ? cause.getLocalizedMessage() : cause.toString();
+		JOptionPane.showMessageDialog(
+				this,
+				message + ":\n" + detail,
+				"Error",
+				JOptionPane.ERROR_MESSAGE
+		);
 	}
 
 	private Path chooseDstDialog(JFileChooser fileChooser) {
@@ -267,5 +373,13 @@ public class BspInfoFrame extends JFrame {
 			return fileChooser.getSelectedFile().toPath();
 		else
 			return null;
+	}
+
+	/**
+	 * A blocking extraction, run on a background thread by {@link #extract}.
+	 */
+	@FunctionalInterface
+	private interface ExtractionTask {
+		void run() throws IOException;
 	}
 }

@@ -35,6 +35,9 @@ public class LumpsPanel extends JPanel {
 	private final JButton btnExtract = new JButton("Extract");
 	private final JButton btnExtractAll = new JButton("Extract all");
 
+	private boolean hasLumps = false;
+	private boolean busy = false;
+
 	public LumpsPanel(
 			Consumer<Set<Integer>> onExtractLumps
 	) {
@@ -88,7 +91,21 @@ public class LumpsPanel extends JPanel {
 	public void update(BspInfoModel model) {
 		tableModel.setData(model.getLumps());
 
-		boolean buttonsEnabled = !model.getLumps().isEmpty();
+		hasLumps = !model.getLumps().isEmpty();
+		updateButtonsEnabled();
+	}
+
+	/**
+	 * Disables the extraction buttons while a background task is running, so no second
+	 * extraction can be started on top of it.
+	 */
+	public void setBusy(boolean busy) {
+		this.busy = busy;
+		updateButtonsEnabled();
+	}
+
+	private void updateButtonsEnabled() {
+		boolean buttonsEnabled = hasLumps && !busy;
 		btnExtract.setEnabled(buttonsEnabled);
 		btnExtractAll.setEnabled(buttonsEnabled);
 	}
