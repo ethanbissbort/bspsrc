@@ -8,6 +8,13 @@ windows_template = inspect.cleandoc("""
     set VM_OPTIONS=
     start "" "{java_path}javaw" %VM_OPTIONS% {launch_cmd} %*""")
 
+# Console-only tools must run through java rather than a detached javaw,
+# otherwise their output never reaches the terminal they were started from.
+windows_console_template = inspect.cleandoc("""
+    @echo off
+    set VM_OPTIONS=
+    "{java_path}java" %VM_OPTIONS% {launch_cmd} %*""")
+
 linux_template = inspect.cleandoc("""
     #!/bin/sh
     set -eu
@@ -19,7 +26,7 @@ linux_template = inspect.cleandoc("""
 if __name__ == '__main__':
     parser = ArgumentParser()
     parser.add_argument("platform", choices=["windows", "linux"])
-    parser.add_argument("app", choices=["src", "info"])
+    parser.add_argument("app", choices=["src", "info", "unprotect"])
     parser.add_argument("runtime_type", choices=["local", "img"])
     parser.add_argument("output", type=Path)
     args = parser.parse_args()
@@ -34,6 +41,9 @@ if __name__ == '__main__':
     match args.app:
         case "src": main_class = "info.ata4.bspsrc.app.src.BspSourceLauncher"
         case "info": main_class = "info.ata4.bspsrc.app.info.BspInfo"
+        case "unprotect": main_class = "info.ata4.bspsrc.app.unprotect.BspUnprotect"
+
+    console_only: bool = args.app == "unprotect"
 
     launch_cmd: str
     match args.runtime_type, args.platform:
@@ -43,7 +53,9 @@ if __name__ == '__main__':
     
     script: str
     match args.platform:
-        case "windows": script = windows_template.format(java_path=java_path, launch_cmd=launch_cmd)
+        case "windows":
+            template = windows_console_template if console_only else windows_template
+            script = template.format(java_path=java_path, launch_cmd=launch_cmd)
         case "linux": script = linux_template.format(java_path=java_path, launch_cmd=launch_cmd)
     
     linefeed: str
