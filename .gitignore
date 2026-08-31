@@ -21,5 +21,8 @@ pom.xml.next
 release.properties
 .flattened-pom.xml
 
+### Tests ###
+.jqwik-database
+
 # Other
 private/
