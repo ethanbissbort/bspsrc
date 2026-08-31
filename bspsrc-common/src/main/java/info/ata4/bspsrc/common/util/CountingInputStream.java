@@ -17,15 +17,15 @@ public class CountingInputStream extends InputStream
 	@Override
 	public int read() throws IOException {
 		int read = delegate.read();
-		if (read > 0)
-			bytesRead += read;
+		if (read >= 0)
+			bytesRead++;
 
 		return read;
 	}
 
 	@Override
 	public int read(byte[] b) throws IOException {
-		int read = delegate.read();
+		int read = delegate.read(b);
 		if (read > 0)
 			bytesRead += read;
 
@@ -34,7 +34,7 @@ public class CountingInputStream extends InputStream
 
 	@Override
 	public int read(byte[] b, int off, int len) throws IOException {
-		int read = delegate.read();
+		int read = delegate.read(b, off, len);
 		if (read > 0)
 			bytesRead += read;
 

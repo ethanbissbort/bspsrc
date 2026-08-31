@@ -74,7 +74,9 @@ public class AlphanumComparator implements Comparator<String> {
             }
         }
 
-        return 0;
+        // all compared digits are equal: the shorter chunk is a prefix of the longer one.
+        // Never return 0 for unequal chunks, as that would violate the Comparator contract.
+        return s1.length() - s2.length();
     }
 
     private static class ChunkIterator implements Iterator<String> {

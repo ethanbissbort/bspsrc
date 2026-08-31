@@ -12,7 +12,7 @@ public class NoMoreRoomInHellDef {
 			.setName("No More Room in Hell")
 			.setAppId(SourceAppId.NO_MORE_ROOM_IN_HELL)
 			.setVersion(20)
-			.setFilePattern(Pattern.compile("^[nmo|nms]_"))
+			.setFilePattern(Pattern.compile("^(nmo|nms)_"))
 			.setEntities(
 					"func_ff_blocker",
 					"func_nmrih_extractionzone",

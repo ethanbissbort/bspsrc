@@ -12,7 +12,7 @@ public class SiNEpisodesEmergenceDef {
 			.setName("SiN Episodes: Emergence")
 			.setAppId(SourceAppId.SIN_EPISODES_EMERGENCE)
 			.setVersion(19)
-			.setFilePattern(Pattern.compile("^arena_$"))
+			.setFilePattern(Pattern.compile("^arena_"))
 			.setEntities(
 					"env_poison_gas",
 					"item_healthvial",

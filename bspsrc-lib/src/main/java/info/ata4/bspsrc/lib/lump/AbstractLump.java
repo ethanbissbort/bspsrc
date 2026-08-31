@@ -108,11 +108,10 @@ public abstract class AbstractLump {
 
         try {
             buffer = LzmaUtil.compress(buffer);
+            setCompressed(true);
         } catch (IOException ex) {
             L.error("Couldn't compress lump " + this, ex);
         }
-
-        setCompressed(true);
     }
 
     public void uncompress() {
@@ -122,11 +121,10 @@ public abstract class AbstractLump {
 
         try {
             buffer = LzmaUtil.uncompress(buffer);
+            setCompressed(false);
         } catch (IOException ex) {
             L.error("Couldn't uncompress lump " + this, ex);
         }
-
-        setCompressed(false);
     }
 
     protected void setCompressed(boolean compressed) {

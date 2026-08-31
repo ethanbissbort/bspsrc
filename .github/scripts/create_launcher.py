@@ -13,7 +13,8 @@ linux_template = inspect.cleandoc("""
     set -eu
     VM_OPTIONS=
     BASEDIR=$(dirname "$0")
-    "{java_path}java" $VM_OPTIONS {launch_cmd} $*""")    
+    "{java_path}java" $VM_OPTIONS {launch_cmd} "$@"
+""")
 
 if __name__ == '__main__':
     parser = ArgumentParser()

@@ -17,6 +17,10 @@
         </dependency>
         <dependency>
             <groupId>info.ata4.bspsrc</groupId>
+            <artifactId>bspsrc-lib</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>info.ata4.bspsrc</groupId>
             <artifactId>bspsrc-decompiler</artifactId>
         </dependency>
 
@@ -130,6 +134,14 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-shade-plugin</artifactId>
+                <dependencies>
+                    <!-- Provides Log4j2PluginCacheFileTransformer -->
+                    <dependency>
+                        <groupId>org.apache.logging.log4j</groupId>
+                        <artifactId>log4j-transform-maven-shade-plugin-extensions</artifactId>
+                        <version>0.2.0</version>
+                    </dependency>
+                </dependencies>
                 <executions>
                     <execution>
                         <phase>package</phase>
@@ -139,16 +151,15 @@
                         <configuration>
                             <shadedArtifactAttached>true</shadedArtifactAttached>
                             <createDependencyReducedPom>false</createDependencyReducedPom>
-                            <filters>
-                                <!-- Needed so log4j2 is not accidentally configured by files coming from dependencies -->
-                                <filter>
-                                    <artifact>*:*</artifact>
-                                    <excludes>
-                                        <exclude>**/Log4j2Plugins.dat</exclude>
-                                    </excludes>
-                                </filter>
-                            </filters>
                             <transformers>
+                                <!--
+                                    Merges the Log4j2Plugins.dat of every artifact, including this
+                                    module's own generated one, into a single plugin cache. Excluding
+                                    the file instead dropped our own plugins (DocumentAppender,
+                                    DialogAppender, IsDecompileTaskFilter) from the shaded jar, so
+                                    the jar-only distribution failed to resolve them on startup.
+                                -->
+                                <transformer implementation="org.apache.logging.log4j.maven.plugins.shade.transformer.Log4j2PluginCacheFileTransformer"/>
                                 <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
                                     <mainClass>info.ata4.bspsrc.app.src.BspSourceLauncher</mainClass>
                                     <manifestEntries>

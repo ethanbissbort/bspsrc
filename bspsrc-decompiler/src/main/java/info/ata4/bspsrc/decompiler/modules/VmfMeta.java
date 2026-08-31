@@ -220,8 +220,8 @@ public class VmfMeta extends ModuleDecompile {
         writer.put("visgroupid", visgroup.id);
         writer.put("color", String.format("%s %s %s",
                 visgroup.getColor().getRed(),
-                visgroup.getColor().getBlue(),
-                visgroup.getColor().getGreen()));
+                visgroup.getColor().getGreen(),
+                visgroup.getColor().getBlue()));
 
         visgroup.visgroups.forEach(this::writeVisgroup);
 

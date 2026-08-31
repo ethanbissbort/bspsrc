@@ -109,8 +109,8 @@ public class BrushSideFaceMapper extends ModuleRead {
 		var origFacesDispRemaining = partitionedRemainingOrigFacesCount.get(true);
 		var origFacesDispTotal = partitionedOrigFacesCount.get(true);
 		L.info(String.format("%d (%.1f%%) nondisp and %d (%.1f%%) disp original faces left after exact brushside->origface matching",
-				origFacesNonDispRemaining, 100.0 * origFacesNonDispRemaining / origFacesNonDispTotal,
-				origFacesDispRemaining, 100.0 * origFacesDispRemaining / origFacesDispTotal));
+				origFacesNonDispRemaining, percent(origFacesNonDispRemaining, origFacesNonDispTotal),
+				origFacesDispRemaining, percent(origFacesDispRemaining, origFacesDispTotal)));
 	}
 
 	/**
@@ -167,7 +167,7 @@ public class BrushSideFaceMapper extends ModuleRead {
 						.entrySet()
 						.stream()
 						.filter(entry -> entry.getValue() > AREA_EPS)
-						.max(Map.Entry.comparingByKey())
+						.max(Map.Entry.comparingByValue())
 						.map(Map.Entry::getKey)
 						.ifPresent(origFaceI -> {
 							brushSideToOrigFace.put(brushSideIndex, origFaceI);
@@ -181,6 +181,10 @@ public class BrushSideFaceMapper extends ModuleRead {
 		L.info(String.format("%d (%.1f%%) partial brushside->origface matches",
 				newMatchesCount, 100.0 * newMatchesCount / bsp.brushSides.size()
 		));
+	}
+
+	private static double percent(long part, long total) {
+		return total == 0 ? 0.0 : 100.0 * part / total;
 	}
 
 	public Optional<Integer> getOrigFaceIndex(int brushSideI) {

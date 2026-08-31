@@ -12,7 +12,7 @@ public class ContagionDef {
 			.setName("Contagion")
 			.setAppId(SourceAppId.CONTAGION)
 			.setVersion(27)
-			.setFilePattern(Pattern.compile("^(ch|ce|cx)_$"))
+			.setFilePattern(Pattern.compile("^(ch|ce|cx)_"))
 			.setEntities(
 					"extraction_area",
 					"info_extractiongoal",

@@ -83,6 +83,11 @@ public class PakFile {
                     continue;
                 }
 
+                // directories are created implicitly when extracting their entries
+                if (ze.isDirectory()) {
+                    continue;
+                }
+
                 // create file path for zip entry and canonize it
                 Path entryFile;
                 try {

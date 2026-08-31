@@ -78,14 +78,14 @@ public class LumpFile {
         L.trace("Lump size: {}", lumpSize);
         L.trace("Map revision: {}", mapRev);
 
-        if (lumpIndex < 0 || lumpIndex > BspFile.HEADER_LUMPS) {
+        if (lumpIndex < 0 || lumpIndex >= BspFile.HEADER_LUMPS) {
             throw new LumpException("Invalid lump ID: " + lumpIndex);
         }
         if (lumpOffset < 0 || lumpOffset > bb.limit()) {
             L.warn("Invalid offset %d for lump %d, assuming %d".formatted(lumpOffset, lumpIndex, HEADER_SIZE));
             lumpOffset = HEADER_SIZE;
         }
-        if (lumpSize < 0 || lumpOffset + lumpSize > bb.limit()) {
+        if (lumpSize < 0 || (long) lumpOffset + (long) lumpSize > bb.limit()) {
             int newLumpSize = bb.limit() - lumpOffset;
             L.warn("Invalid size %d for lump %d, assuming %d".formatted(lumpSize, lumpIndex, newLumpSize));
             lumpSize = newLumpSize;

@@ -2,6 +2,14 @@
 
 **Date:** 2026-08-31 · **Commit audited:** `9e04aa3` · **Version:** 1.4.9-SNAPSHOT
 
+> **Status update.** Most of the defects below have since been fixed. Everything in Tier 1 except
+> finding 4 (`SourceAppDB` cannot answer "unknown"), most of Tier 2, and the bulk of the long tail
+> are addressed; CI now runs on every push and pull request. The findings are left here as written
+> so the reasoning and evidence stay on record. Still open, because each needs a decision rather
+> than a patch: finding 4, the US-ASCII/Latin-1 output charset (16), cancellation (14), colliding
+> output paths (15), the BSPInfo EDT refactor (17), the CLI `--visclusters` flag shape (9), and
+> removal of the dead `app.unprotect` package.
+
 ---
 
 ## Verdict

@@ -24,7 +24,13 @@ public class URILabel extends JLabel {
 
     public void setURI(String text, URI uri) {
         this.uri = uri;
-        super.setText("<html><body><a href=\"" + uri + "\">" + text + "</a></body></html>");
+        if (uri == null) {
+            setCursor(Cursor.getDefaultCursor());
+            super.setText(text);
+        } else {
+            setCursor(new Cursor(Cursor.HAND_CURSOR));
+            super.setText("<html><body><a href=\"" + uri + "\">" + text + "</a></body></html>");
+        }
     }
 
     public void setURI(String text, String uriString) {
@@ -40,6 +46,9 @@ public class URILabel extends JLabel {
 
         @Override
         public void mouseClicked(MouseEvent e) {
+            if (uri == null)
+                return;
+
             if (Desktop.isDesktopSupported()) {
                 try {
                     Desktop.getDesktop().browse(uri);

@@ -328,7 +328,7 @@ public class BspFile {
             }
 
             // fix invalid lengths
-            if (ofs + len > bb.limit()) {
+            if ((long) ofs + (long) len > bb.limit()) {
                 int lenOld = len;
                 len = bb.limit() - ofs;
                 L.warn("Invalid lump length {} in {}, assuming {}", lenOld, ltype, len);
