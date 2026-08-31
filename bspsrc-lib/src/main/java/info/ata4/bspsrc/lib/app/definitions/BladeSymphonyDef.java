@@ -12,7 +12,7 @@ public class BladeSymphonyDef {
 			.setName("Blade Symphony")
 			.setAppId(SourceAppId.BLADE_SYMPHONY)
 			.setVersion(21)
-			.setFilePattern(Pattern.compile("^(duel|ffa|free|tut)_$"))
+			.setFilePattern(Pattern.compile("^(duel|ffa|free|tut)_"))
 			.setEntities(
 					"berimbau_duel",
 					"berimbau_spawn",

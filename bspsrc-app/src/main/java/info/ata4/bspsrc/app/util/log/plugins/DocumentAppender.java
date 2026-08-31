@@ -8,6 +8,7 @@ import org.apache.logging.log4j.core.config.plugins.PluginBuilderFactory;
 import org.apache.logging.log4j.core.config.plugins.PluginFactory;
 import org.apache.logging.log4j.core.layout.PatternLayout;
 
+import javax.swing.*;
 import javax.swing.text.BadLocationException;
 import javax.swing.text.Document;
 import java.io.Serializable;
@@ -37,11 +38,13 @@ public class DocumentAppender extends AbstractAppender {
 		if (str.isBlank())
 			return;
 
-		try {
-			document.insertString(document.getLength(), str, null);
-		} catch (BadLocationException e) {
-			throw new RuntimeException(e);
-		}
+		SwingUtilities.invokeLater(() -> {
+			try {
+				document.insertString(document.getLength(), str, null);
+			} catch (BadLocationException e) {
+				throw new RuntimeException(e);
+			}
+		});
 	}
 
 	@PluginFactory

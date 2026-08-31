@@ -50,11 +50,12 @@ public class EntityIO {
     public EntityIO(String entityIO) {
         String[] elements = entityIO.split(SEP_STR_NEW, -1);
 
-        if (elements.length < 4) {
+        // all five elements are required, see the field reads below
+        if (elements.length < 5) {
             elements = entityIO.split(SEP_STR_OLD, -1);
         }
 
-        if (elements.length < 4) {
+        if (elements.length < 5) {
             throw new IllegalArgumentException("Unsupported I/O format");
         }
 
@@ -62,7 +63,7 @@ public class EntityIO {
         input = elements[1];
         param = elements[2];
         delay = Float.parseFloat(elements[3]);
-        timesToFire = Integer.parseInt(elements[3]);
+        timesToFire = Integer.parseInt(elements[4]);
     }
 
     public String getTargetEntity() {

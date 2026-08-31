@@ -12,7 +12,7 @@ public class TacticalInterventionDef {
 			.setName("Tactical Intervention")
 			.setAppId(SourceAppId.TACTICAL_INTERVENTION)
 			.setVersionRange(20, 21)
-			.setFilePattern(Pattern.compile("^mis_$"))
+			.setFilePattern(Pattern.compile("^mis_"))
 			.setEntities(
 					"func_capture_zone",
 					"func_capzone_terrorist_1",

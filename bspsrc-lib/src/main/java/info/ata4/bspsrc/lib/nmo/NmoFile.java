@@ -83,7 +83,7 @@ public class NmoFile {
 	public void writeAsNmos(Path path) throws IOException {
 		L.info("Writing nmos file: " + path);
 
-		try (DataWriter fileWriter = DataWriters.forFile(path, StandardOpenOption.CREATE, StandardOpenOption.WRITE)) {
+		try (DataWriter fileWriter = DataWriters.forFile(path, StandardOpenOption.CREATE, StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING)) {
 			fileWriter.order(ByteOrder.LITTLE_ENDIAN);
 
 			fileWriter.writeByte(SIGNATURE);

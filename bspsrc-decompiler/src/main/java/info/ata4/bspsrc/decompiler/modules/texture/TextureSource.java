@@ -147,7 +147,7 @@ public class TextureSource extends ModuleRead {
         for (int i = 0; i < bsp.cubemaps.size(); i++) {
             int[] origin = bsp.cubemaps.get(i).origin;
 
-            if (cx == origin[0] || cy == origin[1] || cz == origin[2]) {
+            if (cx == origin[0] && cy == origin[1] && cz == origin[2]) {
                 if (L.isTraceEnabled()) {
                     L.trace("TN: {} C: {}", itexname, i);
                 }

@@ -12,7 +12,7 @@ public class CounterStrikeGlobalOffensiveDef {
 			.setName("Counter-Strike: Global Offensive")
 			.setAppId(SourceAppId.COUNTER_STRIKE_GO)
 			.setVersion(21)
-			.setFilePattern(Pattern.compile("^[de|cs]_"))
+			.setFilePattern(Pattern.compile("^(de|cs)_"))
 			.setEntities(
 					"flashbang_projectile",
 					"func_bomb_target",

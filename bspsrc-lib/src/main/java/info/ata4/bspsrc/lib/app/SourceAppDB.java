@@ -94,7 +94,11 @@ public class SourceAppDB {
                 .map(app -> new SourceAppScore(app, calculateAppScore(app, bspName, bspVersion, classNames)))
                 .peek(appScore -> L.debug(String.format("App %s has score %f", appScore.app().getName(), appScore.score())))
                 .max(Comparator.comparing(SourceAppScore::score))
-                .filter(appScore -> appScore.score() >= 0)
+                // Require positive evidence. A score of exactly 0 only means the version didn't
+                // disqualify the app, with nothing matching its entities or file name; admitting
+                // that would report a confident, arbitrary guess (the winner being decided by list
+                // order) for any map that carries no distinguishing evidence.
+                .filter(appScore -> appScore.score() > 0)
                 .map(SourceAppScore::app)
                 .map(SourceApp::getAppId)
                 .orElse(SourceAppId.UNKNOWN);

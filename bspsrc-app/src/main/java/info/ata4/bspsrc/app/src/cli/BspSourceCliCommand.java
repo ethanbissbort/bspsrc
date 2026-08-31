@@ -19,6 +19,7 @@ import java.nio.file.Path;
 import java.nio.file.PathMatcher;
 import java.util.*;
 import java.util.concurrent.Callable;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Stream;
 
 import static info.ata4.bspsrc.app.util.ErrorMessageUtil.decompileExceptionToMessage;
@@ -40,7 +41,7 @@ import static picocli.CommandLine.*;
 		sortSynopsis = false,
 		showDefaultValues = true
 )
-public class BspSourceCliCommand implements Callable<Void> {
+public class BspSourceCliCommand implements Callable<Integer> {
 
 	private static final Logger L = LogManager.getLogger();
 	private static final BspSourceConfig INITIAL_CONFIG = new BspSourceConfig();
@@ -53,7 +54,7 @@ public class BspSourceCliCommand implements Callable<Void> {
 	private boolean recursive;
 	@Option(names = { "-o", "--output" }, description = "Override output path for VMF file(s). Treated as directory if multiple BSP files are provided.", paramLabel = "<path>")
 	private Path outputPath;
-	@Option(names = { "-l", "--list" }, description = "Treat specified files as text files containing a BSP file list. BSP files are seperated by new lines.")
+	@Option(names = { "-l", "--list" }, description = "Treat specified files as text files containing a BSP file list. BSP files are separated by new lines.")
 	private boolean useFileLists;
 	@Parameters(
 			description = {
@@ -86,8 +87,9 @@ public class BspSourceCliCommand implements Callable<Void> {
 		private boolean noOccluderEnts;
 		@Option(names = "--no_ladders", description = "Don't write func_ladder entities.")
 		private boolean noLadderEnts;
-		@Option(names = "--no_visclusters", description = "Don't write func_viscluster entities.")
-		private boolean noVisClusterEnts;
+		@Option(names = "--visclusters", description = "Try to reconstruct func_viscluster entities. "
+				+ "Off by default: the result is inaccurate most of the time and needs manual cleanup to be useful.")
+		private boolean visClusterEnts;
 		@Option(names = "--no_rotfix", description = "Don't fix instance entity brush rotations for Hammer.")
 		private boolean noInstanceEntityRotationFix;
 		@Option(names = "--force_manual_areaportal", description = "Force manual entity mapping for areaportal entities.")
@@ -106,10 +108,10 @@ public class BspSourceCliCommand implements Callable<Void> {
 		private boolean noDisplacements;
 		@Option(names = "--brushmode", description = {
 				"Brush decompiling mode:",
-				"${BrushMode.BRUSHPLANES.name()} - brushes and planes",
-				"${BrushMode.ORIGFACE.name()} - original faces only",
-				"${BrushMode.ORIGFACE_PLUS.name()} - original + split faces",
-				"${BrushMode.SPLITFACE.name()} - split faces only"
+				"BRUSHPLANES - brushes and planes",
+				"ORIGFACE - original faces only",
+				"ORIGFACE_PLUS - original + split faces",
+				"SPLITFACE - split faces only"
 		}, paramLabel = "<mode>")
 		private BrushMode brushMode = INITIAL_CONFIG.brushMode;
 		@Option(names = "--thickness", description = "Thickness of brushes create from flat faces in units.", paramLabel = "<value>")
@@ -148,7 +150,7 @@ public class BspSourceCliCommand implements Callable<Void> {
 		private boolean noCams;
 		@Option(names = "--appid", description = {
 				"Overrides game detection by using this Steam Application ID instead",
-				"Use -appids to list all known app-IDs."
+				"Use --appids to list all known app-IDs."
 		}, paramLabel = "<id>")
 		private int appId;
 		@Option(names = "--format", description = {
@@ -168,7 +170,7 @@ public class BspSourceCliCommand implements Callable<Void> {
 	}
 
 	@Override
-	public Void call() throws IOException, InterruptedException {
+	public Integer call() throws IOException, InterruptedException {
 		if (debug) {
 			Log4jUtil.setRootLevel(Level.DEBUG);
 			L.debug("Debug mode on, verbosity set to maximum");
@@ -180,29 +182,37 @@ public class BspSourceCliCommand implements Callable<Void> {
 					.sorted(Map.Entry.comparingByValue(AlphanumComparator.COMPARATOR))
 					.forEachOrdered(entry -> System.out.printf("%8d  %s\n", entry.getKey(), entry.getValue()));
 
-			return null;
+			return ExitCode.OK;
 		}
 
 		BspSourceConfig config = getConfig();
 		List<BspFileEntry> entries = new ArrayList<>(getEntries());
 		if (entries.isEmpty()) {
 			L.error("No BSP file(s) specified");
-			return null;
+			return ExitCode.USAGE;
 		}
 
+		// Two different bsp files decompiling into the same vmf file would have their tasks
+		// write into that file simultaneously, silently producing a corrupt vmf.
+		if (hasOutputCollisions(entries))
+			return ExitCode.USAGE;
+
 		var bspsrc = new BspSource(config, entries);
+		var failedTasks = new AtomicInteger();
 
 		try (var scope = Log4jUtil.configureDecompilationLogFileAppender(bspsrc.getEntryUuids(), entries)) {
 			bspsrc.run(signal -> {
 				if (signal instanceof BspSource.Signal.TaskFinished task) {
 					printTaskFinished(entries, task);
 				} else if (signal instanceof BspSource.Signal.TaskFailed task) {
+					failedTasks.incrementAndGet();
 					printTaskFailed(entries, task);
 				}
 			});
 		}
 
-		return null;
+		// report failures through the exit code, so scripts and CI can detect them
+		return failedTasks.get() == 0 ? ExitCode.OK : ExitCode.SOFTWARE;
 	}
 
 	private static void printTaskFailed(List<BspFileEntry> entries, BspSource.Signal.TaskFailed task) {
@@ -231,7 +241,7 @@ public class BspSourceCliCommand implements Callable<Void> {
 		config.writeAreaportals = !entityOpts.noAreaportalEnts;
 		config.writeOccluders = !entityOpts.noOccluderEnts;
 		config.writeLadders = !entityOpts.noLadderEnts;
-		config.writeVisClusters = !entityOpts.noVisClusterEnts;
+		config.writeVisClusters = entityOpts.visClusterEnts;
 		config.fixEntityRot = !entityOpts.noInstanceEntityRotationFix;
 		config.apForceManualMapping = entityOpts.forceAreaportalManualEntMapping;
 		config.detailMerge = entityOpts.mergeFunctDetails;
@@ -263,7 +273,7 @@ public class BspSourceCliCommand implements Callable<Void> {
 		return config;
 	}
 
-	private Set<BspFileEntry> getEntries() throws IOException {
+	private List<BspFileEntry> getEntries() throws IOException {
 		List<Path> bspPaths;
 		if (useFileLists) {
 			// it could be so easy...
@@ -285,26 +295,85 @@ public class BspSourceCliCommand implements Callable<Void> {
 			bspPaths = paths;
 		}
 
-		var fileSet = new HashSet<BspFileEntry>();
+		// Keyed by canonical bsp path, so the very same file specified more than once - as
+		// 'map.bsp' and './map.bsp', or both explicitly and through a directory - is silently
+		// decompiled just once. Insertion ordered, with the first occurrence winning, so the
+		// resulting order doesn't depend on hashing.
+		var fileMap = new LinkedHashMap<Path, BspFileEntry>();
 		for (Path path : bspPaths) {
 			if (Files.isDirectory(path)) {
 				PathMatcher bspPathMatcher = path.getFileSystem().getPathMatcher("glob:**.bsp");
-				try (Stream<Path> pathStream = Files.walk(path, recursive ? Integer.MAX_VALUE : 0)) {
+				try (Stream<Path> pathStream = Files.walk(path, recursive ? Integer.MAX_VALUE : 1)) {
 					pathStream
 							.filter(Files::isRegularFile)
 							.filter(bspPathMatcher::matches)
 							.map(bspPath -> new BspFileEntry(bspPath, BspPathUtil.defaultVmfPath(bspPath, outputPath)))
-							.forEach(fileSet::add);
+							.forEachOrdered(entry -> fileMap.putIfAbsent(canonicalPath(entry.getBspFile()), entry));
 				}
 			} else {
 				Path vmfPath = bspPaths.size() > 1 || outputPath == null
 						? BspPathUtil.defaultVmfPath(path, outputPath)
 						: outputPath;
 
-				fileSet.add(new BspFileEntry(path, vmfPath));
+				fileMap.putIfAbsent(canonicalPath(path), new BspFileEntry(path, vmfPath));
 			}
 		}
 
-		return fileSet;
+		return List.copyOf(fileMap.values());
+	}
+
+	/**
+	 * Checks if multiple, distinct bsp files would be decompiled into the same vmf file.
+	 * <p>
+	 * Decompile tasks run in parallel, so two tasks sharing an output path would write into that
+	 * file at the same time, interleaving into a corrupt vmf without reporting an error. Every
+	 * such collision is logged, naming the shared output and all bsp files involved.
+	 *
+	 * @return true if at least one collision was found
+	 */
+	private static boolean hasOutputCollisions(List<BspFileEntry> entries) {
+		var entriesByOutput = new LinkedHashMap<Path, List<BspFileEntry>>();
+		for (BspFileEntry entry : entries) {
+			entriesByOutput
+					.computeIfAbsent(canonicalPath(entry.getVmfFile()), key -> new ArrayList<>())
+					.add(entry);
+		}
+
+		boolean collision = false;
+		for (var outputEntry : entriesByOutput.entrySet()) {
+			List<BspFileEntry> collidingEntries = outputEntry.getValue();
+			if (collidingEntries.size() < 2)
+				continue;
+
+			collision = true;
+			L.error("Output file collision: {} bsp files would all be decompiled into '{}':",
+					collidingEntries.size(), outputEntry.getKey());
+			for (BspFileEntry collidingEntry : collidingEntries)
+				L.error("    '{}'", collidingEntry.getBspFile());
+		}
+
+		if (collision) {
+			L.error("Aborting without decompiling anything, as these files would overwrite each other. "
+					+ "Decompile them separately or into separate output directories (-o).");
+		}
+
+		return collision;
+	}
+
+	/**
+	 * Resolves a path into a canonical form, to compare paths by the file they identify rather
+	 * than by how they happen to be spelled.
+	 * <p>
+	 * {@link Path#toRealPath} is preferred, because it also resolves symlinks and, on case
+	 * insensitive file systems, the actual case of the file name. It requires the file to exist
+	 * though, so for files that don't (yet) exist - most notably the vmf output paths, but also
+	 * bsp paths the user mistyped - we fall back to a purely lexical absolute path.
+	 */
+	private static Path canonicalPath(Path path) {
+		try {
+			return path.toRealPath();
+		} catch (IOException e) {
+			return path.toAbsolutePath().normalize();
+		}
 	}
 }

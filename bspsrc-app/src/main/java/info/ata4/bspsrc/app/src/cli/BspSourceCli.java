@@ -31,9 +31,14 @@ public class BspSourceCli {
         var cmdLine = new CommandLine(new BspSourceCliCommand());
         cmdLine.setColorScheme(CommandLine.Help.defaultColorScheme(CommandLine.Help.Ansi.AUTO));
 
-        if (args.length == 0)
+        int exitCode;
+        if (args.length == 0) {
             cmdLine.usage(cmdLine.getOut());
-        else
-            cmdLine.execute(args);
+            exitCode = CommandLine.ExitCode.USAGE;
+        } else {
+            exitCode = cmdLine.execute(args);
+        }
+
+        System.exit(exitCode);
     }
 }

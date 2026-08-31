@@ -23,6 +23,8 @@ import java.awt.event.WindowEvent;
 import java.io.File;
 import java.net.URL;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 
 import static info.ata4.bspsrc.common.util.Collectors.mode;
@@ -120,9 +122,49 @@ public class BspSourceFrame extends JFrame {
 			entries = bspPaths.stream()
 					.map(bspPath -> new BspFileEntry(bspPath, BspPathUtil.defaultVmfPath(bspPath, dirPath)))
 					.toList();
+
+			// Maps that share a name land on the same vmf path once a common output directory is
+			// picked. Their tasks run in parallel, so both would write into that one file and
+			// interleave into a corrupt vmf without reporting anything.
+			if (reportOutputCollisions(entries))
+				return;
 		}
 
 		model.decompile(entries);
+	}
+
+	/**
+	 * Tells the user about distinct bsp files that would be decompiled into the same vmf file.
+	 *
+	 * @return {@code true} if a collision was found and decompiling must not start
+	 */
+	private boolean reportOutputCollisions(List<BspFileEntry> entries) {
+		var entriesByOutput = new LinkedHashMap<Path, List<BspFileEntry>>();
+		for (BspFileEntry entry : entries) {
+			entriesByOutput
+					.computeIfAbsent(entry.getVmfFile().toAbsolutePath().normalize(), key -> new ArrayList<>())
+					.add(entry);
+		}
+
+		var message = new StringBuilder("These maps would be decompiled into the same file:\n");
+		boolean collision = false;
+		for (var outputEntry : entriesByOutput.entrySet()) {
+			List<BspFileEntry> collidingEntries = outputEntry.getValue();
+			if (collidingEntries.size() < 2)
+				continue;
+
+			collision = true;
+			message.append('\n').append(outputEntry.getKey()).append('\n');
+			for (BspFileEntry collidingEntry : collidingEntries)
+				message.append("    ").append(collidingEntry.getBspFile()).append('\n');
+		}
+
+		if (!collision)
+			return false;
+
+		message.append("\nDecompile them separately, or into separate output directories.");
+		JOptionPane.showMessageDialog(this, message.toString(), "Output file collision", JOptionPane.ERROR_MESSAGE);
+		return true;
 	}
 
 	public BspSourceFrame(BspSourceModel model) {

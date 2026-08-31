@@ -228,7 +228,18 @@ public class EntitySource extends ModuleDecompile {
                 String oidStr = ent.getValue("OverlayID");
 
                 if (oidStr != null && !oidStr.isEmpty()) {
-                    int oid = Integer.valueOf(oidStr);
+                    int oid;
+
+                    try {
+                        oid = Integer.parseInt(oidStr);
+                    } catch (NumberFormatException e) {
+                        L.warn(String.format(
+                                "Can't parse %s 'OverlayID' attribute: '%s', skipping...",
+                                className,
+                                oidStr
+                        ));
+                        continue;
+                    }
 
                     // save the targetname for writeOverlays()
                     overlayNames.put(oid, ent.getTargetName());
@@ -685,8 +696,8 @@ public class EntitySource extends ModuleDecompile {
             // write fade distances
             if (bsp.overlayFades != null && !bsp.overlayFades.isEmpty()) {
                 DOverlayFade of = bsp.overlayFades.get(overlayI);
-                writer.put("fademindist", of.fadeDistMinSq);
-                writer.put("fademaxdist", of.fadeDistMaxSq);
+                writer.put("fademindist", unsquareFadeDist(of.fadeDistMinSq));
+                writer.put("fademaxdist", unsquareFadeDist(of.fadeDistMaxSq));
             }
 
             // write system levels
@@ -723,7 +734,7 @@ public class EntitySource extends ModuleDecompile {
                             if (brushSideId >= 0) {
                                 sides.add(brushSideId);
                             } else {
-                                L.warn("Face {} used by overlay {} is mapped to brushside {}, which was never written.", overlayI, origFaceI, brushSideI);
+                                L.warn("Face {} used by overlay {} is mapped to brushside {}, which was never written.", origFaceI, overlayI, brushSideI);
                             }
                         }
                     }
@@ -1050,6 +1061,14 @@ public class EntitySource extends ModuleDecompile {
         }
 
         return hammerid;
+    }
+
+    /**
+     * Converts a squared overlay fade distance to a plain distance, as expected by Hammer.
+     * Negative values are sentinels (e.g. -1 for "no fade") and are passed through unchanged.
+     */
+    private static float unsquareFadeDist(float sq) {
+        return sq < 0 ? sq : (float) Math.sqrt(sq);
     }
 
     private void fixLightEntity(Entity ent) {

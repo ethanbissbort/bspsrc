@@ -11,6 +11,12 @@ BSPSource is based on a reengineered version of [VMEX 0.98g](http://www.bagthorp
 2. Extract the contents of the zip file to a new folder.
 3. To launch bspsrc/bspinfo, run the corresponding file: `bspsrc.bat`/`bspinfo.bat` on Windows, or `bspsrc.sh`/`bspinfo.sh` on Linux.
 
+### Included tools
+
+* **bspsrc** — the decompiler itself. Launches the graphical interface when started without arguments, and acts as a command line tool when given any; run it with `--help` for the full list of options.
+* **bspinfo** — a graphical viewer for a map's header, lumps, entities, embedded files and anti-decompiling protection.
+* **bspunprotect** — a small command line tool that recovers the entity lump of a map protected with [BSPProtect](https://developer.valvesoftware.com/wiki/BSPProtect). Usage: `bspunprotect <BSP file> [key]`. It defaults to the standard BSPProtect key, so the key argument is only needed for a map using a custom one. The .bsp itself is left untouched: the decrypted entities are written alongside it as a `<mapname>_l_0.lmp` lump file, which the engine and bspsrc both read as an override. Decompile the map afterwards to get the restored entities.
+
 ## Frequently asked Questions
 
 * **Can you support _\<game\>_:** Generally speaking, most Source engine games should work with BSPSource out of the box, even though they might not be explicitly "supported". If you run into any problems or errors with any particular game/map, feel free to open an [Issue](https://github.com/ata4/bspsrc/issues).\

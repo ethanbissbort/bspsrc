@@ -12,7 +12,7 @@ public class CounterStrikeSourceDef {
 			.setName("Counter-Strike: Source")
 			.setAppId(SourceAppId.COUNTER_STRIKE_SOURCE)
 			.setVersionRange(19, 20)
-			.setFilePattern(Pattern.compile("^[de|cs]_"))
+			.setFilePattern(Pattern.compile("^(de|cs)_"))
 			.setEntities(
 					"func_bomb_target",
 					"func_buyzone",

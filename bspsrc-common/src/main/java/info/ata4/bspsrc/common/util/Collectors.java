@@ -30,9 +30,9 @@ public class Collectors {
 			public BinaryOperator<Map<T, Integer>> combiner() {
 				return (m0, m1) -> {
 					for (var e : m1.entrySet())
-						m1.merge(e.getKey(), e.getValue(), Integer::sum);
+						m0.merge(e.getKey(), e.getValue(), Integer::sum);
 
-					return m1;
+					return m0;
 				};
 			}
 

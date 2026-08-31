@@ -21,9 +21,14 @@ import org.apache.commons.compress.archivers.zip.ZipFile;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import javax.swing.*;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.*;
+import java.util.concurrent.ExecutionException;
+import java.util.function.Consumer;
+
+import static java.util.Objects.requireNonNull;
 
 public class BspInfoModel {
 
@@ -44,15 +49,39 @@ public class BspInfoModel {
 	private List<GameLumpInfo> gameLumps = List.of();
 	private List<EmbeddedInfo> embeddedInfos = List.of();
 
-	public void load(Path filePath) throws BspException, IOException {
-		bspFile = new BspFile();
+	/**
+	 * Loads the specified bsp file.
+	 * <p>
+	 * Reading a bsp file is expensive - it computes a crc over the whole file, scans it for
+	 * protection and enumerates its pakfile - so all of that is done on a background thread.
+	 * This model and its listeners are only ever touched on the event dispatch thread, after
+	 * reading finished successfully.
+	 *
+	 * @param filePath the bsp file to read
+	 * @param onFinished called on the event dispatch thread once the load finished, with
+	 *                   {@code null} if it succeeded or the cause of the failure otherwise
+	 */
+	public void load(Path filePath, Consumer<Throwable> onFinished) {
+		new LoadWorker(filePath, onFinished).execute();
+	}
+
+	/**
+	 * Reads everything this model exposes from the specified bsp file, without touching any
+	 * state. Includes the protection scan, as it is only meaningful together with the rest
+	 * of the loaded data.
+	 * <p>
+	 * This does blocking file io and must therefore <b>not</b> be called on the event
+	 * dispatch thread, use {@link #load(Path, Consumer)} instead.
+	 */
+	private static LoadedBsp read(Path filePath) throws BspException, IOException {
+		var bspFile = new BspFile();
 		bspFile.load(filePath);
 
 		int lumpSizeSum = bspFile.getLumps().stream()
 				.mapToInt(AbstractLump::getLength)
 				.sum();
 
-		lumps = bspFile.getLumps().stream()
+		var lumps = bspFile.getLumps().stream()
 				.map(lump -> new LumpInfo(
 						lump.getIndex(),
 						lump.getName(),
@@ -66,7 +95,7 @@ public class BspInfoModel {
 				.mapToInt(AbstractLump::getLength)
 				.sum();
 
-		gameLumps = bspFile.getGameLumps().stream()
+		var gameLumps = bspFile.getGameLumps().stream()
 				.map(lump -> new GameLumpInfo(
 						lump.getName(),
 						lump.getLength(),
@@ -81,19 +110,20 @@ public class BspInfoModel {
 		var windingFactory = WindingFactory.forAppId(bspFile.getAppId());
 		var brushBounds = new BrushBounds(windingFactory);
 
-		bspData = bspReader.getData();
-		cparams = new BspCompileParams(bspReader);
+		var bspData = bspReader.getData();
+		var cparams = new BspCompileParams(bspReader);
 
 		var texsrc = new TextureSource(bspReader);
-		prot = new BspProtection(bspReader, brushBounds, texsrc, false);
+		var prot = new BspProtection(bspReader, brushBounds, texsrc, false);
 		prot.check();
 
-		bspres = new BspDependencies(bspReader);
+		var bspres = new BspDependencies(bspReader);
 
 		var checksum = new BspChecksum(bspReader);
-		fileCrc = checksum.getFileCRC();
-		mapCrc = checksum.getMapCRC();
+		long fileCrc = checksum.getFileCRC();
+		long mapCrc = checksum.getMapCRC();
 
+		List<EmbeddedInfo> embeddedInfos = List.of();
 		try (ZipFile zip = bspFile.getPakFile().getZipFile()) {
 			var files = new ArrayList<EmbeddedInfo>();
 
@@ -105,12 +135,48 @@ public class BspInfoModel {
 
 			embeddedInfos = files;
 		} catch (IOException ex) {
-			L.warn("Can't read pak");
+			L.warn("Can't read pak", ex);
 		}
+
+		return new LoadedBsp(
+				bspFile,
+				bspData,
+				cparams,
+				prot,
+				bspres,
+				fileCrc,
+				mapCrc,
+				lumps,
+				gameLumps,
+				embeddedInfos
+		);
+	}
+
+	/**
+	 * Applies a previously read bsp file to this model and notifies all listeners.
+	 * <p>
+	 * Must be called on the event dispatch thread, as the listeners update swing components.
+	 */
+	private void apply(LoadedBsp bsp) {
+		bspFile = bsp.bspFile();
+		bspData = bsp.bspData();
+		cparams = bsp.cparams();
+		prot = bsp.prot();
+		bspres = bsp.bspres();
+		fileCrc = bsp.fileCrc();
+		mapCrc = bsp.mapCrc();
+		lumps = bsp.lumps();
+		gameLumps = bsp.gameLumps();
+		embeddedInfos = bsp.embeddedInfos();
 
 		listeners.forEach(Runnable::run);
 	}
 
+	/**
+	 * Extracts the specified lumps into {@code lumpsDst}.
+	 * <p>
+	 * Blocking io, must not be called on the event dispatch thread.
+	 */
 	public void extractLumps(Set<Integer> lumpIndices, Path lumpsDst) throws IOException {
 		for (int lumpIndex : lumpIndices) {
 			var lump = bspFile.getLumps().get(lumpIndex);
@@ -118,6 +184,11 @@ public class BspInfoModel {
 		}
 	}
 
+	/**
+	 * Extracts the specified game lumps into {@code lumpsDst}.
+	 * <p>
+	 * Blocking io, must not be called on the event dispatch thread.
+	 */
 	public void extractGameLumps(Set<Integer> lumpIndices, Path lumpsDst) throws IOException {
 		for (int lumpIndex : lumpIndices) {
 			var lump = bspFile.getGameLumps().get(lumpIndex);
@@ -125,6 +196,11 @@ public class BspInfoModel {
 		}
 	}
 
+	/**
+	 * Extracts the specified embedded files into {@code filesDst}.
+	 * <p>
+	 * Blocking io, must not be called on the event dispatch thread.
+	 */
 	public void extractEmbeddedFiles(Set<Integer> fileIndices, Path filesDst) throws IOException {
 
 		// this is maybe a little bit weird of doing this, but i can't be bothered
@@ -144,6 +220,11 @@ public class BspInfoModel {
 		bspFile.getPakFile().unpack(filesDst, fileNames::contains);
 	}
 
+	/**
+	 * Extracts the pakfile as a raw zip file to {@code filesDst}.
+	 * <p>
+	 * Blocking io, must not be called on the event dispatch thread.
+	 */
 	public void extractEmbeddedFilesRaw(Path filesDst) throws IOException {
 		bspFile.getPakFile().unpack(filesDst, true);
 	}
@@ -182,4 +263,57 @@ public class BspInfoModel {
 	public List<EmbeddedInfo> getEmbeddedInfos() {
 		return embeddedInfos;
 	}
+
+	private class LoadWorker extends SwingWorker<LoadedBsp, Void> {
+
+		private final Path filePath;
+		private final Consumer<Throwable> onFinished;
+
+		private LoadWorker(Path filePath, Consumer<Throwable> onFinished) {
+			this.filePath = requireNonNull(filePath);
+			this.onFinished = requireNonNull(onFinished);
+		}
+
+		@Override
+		protected LoadedBsp doInBackground() throws BspException, IOException {
+			return read(filePath);
+		}
+
+		@Override
+		protected void done() {
+			LoadedBsp bsp = null;
+			Throwable failureCause = null;
+			try {
+				bsp = get();
+			} catch (InterruptedException e) {
+				failureCause = e;
+			} catch (ExecutionException e) {
+				failureCause = e.getCause();
+			}
+
+			// only update the model once everything could be read, so a failed load leaves
+			// the previously loaded bsp file in place instead of a half updated model
+			if (bsp != null)
+				apply(bsp);
+
+			onFinished.accept(failureCause);
+		}
+	}
+
+	/**
+	 * Everything {@link #read(Path)} extracts from a bsp file, handed over to the event
+	 * dispatch thread in one piece.
+	 */
+	private record LoadedBsp(
+			BspFile bspFile,
+			BspData bspData,
+			BspCompileParams cparams,
+			BspProtection prot,
+			BspDependencies bspres,
+			long fileCrc,
+			long mapCrc,
+			List<LumpInfo> lumps,
+			List<GameLumpInfo> gameLumps,
+			List<EmbeddedInfo> embeddedInfos
+	) {}
 }

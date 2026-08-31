@@ -10,6 +10,7 @@
 
 package info.ata4.bspsrc.app.unprotect;
 
+import info.ata4.bspsrc.decompiler.BspSource;
 import info.ata4.bspsrc.lib.BspFile;
 import info.ata4.bspsrc.lib.exceptions.BspException;
 import info.ata4.bspsrc.lib.lump.Lump;
@@ -33,7 +34,7 @@ import java.util.Iterator;
  */
 public class BspUnprotect {
 
-    public static final String VERSION = "1.0";
+    public static final String VERSION = BspSource.VERSION;
     public static final String BSPPROTECT_FILE = "entities.dat";
     public static final String BSPPROTECT_KEY = "EhZT36ErlQlZpLm7";
 
@@ -43,8 +44,8 @@ public class BspUnprotect {
     public static void main(String[] args) {
         if (args.length == 0) {
             System.out.println("BspUnprotect " + VERSION);
-            System.out.println("Usage: bspunprotect.jar <BSP file> [key]");
-            System.exit(0);
+            System.out.println("Usage: bspunprotect <BSP file> [key]");
+            System.exit(2);
         }
 
         Path file = Paths.get(args[0]);
@@ -55,7 +56,9 @@ public class BspUnprotect {
             unprot.setKey(key);
             unprot.decrypt(file);
         } catch (Exception ex) {
-            System.err.println(ex.getMessage());
+            // report the failure through the exit code as well, so scripts can detect it
+            System.err.println(ex.getClass().getSimpleName() + ": " + ex.getMessage());
+            System.exit(1);
         }
     }
 

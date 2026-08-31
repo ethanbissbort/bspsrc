@@ -466,7 +466,7 @@ public class BrushSource extends ModuleDecompile {
     }
 
     public boolean writeModel(int imodel) {
-        return writeModel(imodel);
+        return writeModel(imodel, null, null);
     }
 
     public int getWorldbrushes() {

@@ -62,12 +62,14 @@ jobs:
         run: |
           python .github/scripts/create_launcher.py linux src ${{ matrix.options.runtime-type }} packaging/bspsrc.sh
           python .github/scripts/create_launcher.py linux info ${{ matrix.options.runtime-type }} packaging/bspinfo.sh
+          python .github/scripts/create_launcher.py linux unprotect ${{ matrix.options.runtime-type }} packaging/bspunprotect.sh
 
       - name: Copy Windows launcher scripts
         if: ${{ matrix.options.windows_launcher }}
         run: |
           python .github/scripts/create_launcher.py windows src ${{ matrix.options.runtime-type }} packaging/bspsrc.bat
           python .github/scripts/create_launcher.py windows info ${{ matrix.options.runtime-type }} packaging/bspinfo.bat
+          python .github/scripts/create_launcher.py windows unprotect ${{ matrix.options.runtime-type }} packaging/bspunprotect.bat
 
       - name: Copy runtime
         if: ${{ matrix.options.runtime-type == 'img' }}

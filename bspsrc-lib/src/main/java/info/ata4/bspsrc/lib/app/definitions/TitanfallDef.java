@@ -12,7 +12,7 @@ public class TitanfallDef {
 			.setName("Titanfall")
 			.setAppId(SourceAppId.TITANFALL)
 			.setVersion(29)
-			.setFilePattern(Pattern.compile("^mp_$"))
+			.setFilePattern(Pattern.compile("^mp_"))
 			.setEntities(
 					"env_dropzone",
 					"func_window_hint",

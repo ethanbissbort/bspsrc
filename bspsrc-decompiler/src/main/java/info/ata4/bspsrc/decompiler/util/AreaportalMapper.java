@@ -207,7 +207,7 @@ public class AreaportalMapper {
         outer:
         for (int job = 0; job < assignments.length; job++) {
             var portal = job; // because java sucks
-            if (assignments[portal] <= 0 || scores[portal][assignments[portal]] == 0)
+            if (assignments[portal] < 0 || scores[portal][assignments[portal]] == 0)
                 continue;
             
             for (var group : groups) {

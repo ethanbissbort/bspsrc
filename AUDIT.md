@@ -2,6 +2,27 @@
 
 **Date:** 2026-08-31 · **Commit audited:** `9e04aa3` · **Version:** 1.4.9-SNAPSHOT
 
+> **Status update.** Every finding below has since been addressed, including the seven that
+> originally needed a decision rather than a patch. The findings are left here as written so the
+> reasoning and evidence stay on record; the notes under each resolved item record what was chosen.
+>
+> The seven judgement calls were resolved as follows. **Finding 4** — detection now requires
+> positive evidence, so a map with nothing distinctive reports as unknown rather than as a
+> confidently wrong game; maps that previously got a lucky-correct guess now report unknown too,
+> which is the intended trade. **Finding 16** — the VMF is written as Latin-1, matching the charset
+> the entity lump is decoded with, so non-ASCII names round-trip. **Finding 9** — the CLI viscluster
+> flag is now the opt-in `--visclusters`, matching the library and GUI default. **Finding 14** —
+> cancellation is cooperative at coarse task boundaries; an entry already inside the decompiler
+> finishes that one map. **Finding 15** — duplicate inputs collapse silently, and two different maps
+> sharing an output path abort before any work starts. **Finding 17** — BSPInfo runs its loading and
+> extraction on SwingWorkers. **The dead `app.unprotect` package** was wired up as a supported tool
+> rather than deleted: it now has launchers, packaging and documentation.
+>
+> One correction to the report itself: finding 17's claim that a failed lump extraction "shows the
+> user nothing at all" was wrong. `DialogAppender` is installed on the root logger while the BSPInfo
+> window is open and turns any `ERROR` record into a dialog, so a failure did surface — as a raw
+> stack trace. It is now reported deliberately at the call site instead.
+
 ---
 
 ## Verdict

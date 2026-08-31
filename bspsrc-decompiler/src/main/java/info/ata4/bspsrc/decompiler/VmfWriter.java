@@ -20,6 +20,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.Closeable;
+import java.io.IOException;
 import java.io.PrintWriter;
 import java.text.DecimalFormat;
 import java.text.DecimalFormatSymbols;
@@ -227,13 +228,22 @@ public class VmfWriter implements Closeable {
     }
 
     @Override
-    public void close() {
+    public void close() throws IOException {
         pw.close();
+
+        // PrintWriter swallows every IOException, so without this check a failed
+        // write (a full disk, for example) leaves a truncated VMF behind while the
+        // decompile still reports success.
+        boolean writeFailed = pw.checkError();
 
         // stack should be empty, otherwise someone forgot to call end() at least once
         if (!section.isEmpty()) {
             var stackState = String.join(" -> ", (Iterable<String>) section::descendingIterator);
             L.warn("Unclosed VMF chunk: {}", stackState);
+        }
+
+        if (writeFailed) {
+            throw new IOException("Error writing VMF output, the file is most likely incomplete");
         }
     }
 }

@@ -12,7 +12,7 @@ public class SynergyDef {
 			.setName("Synergy")
 			.setAppId(SourceAppId.SYNERGY)
 			.setVersion(20)
-			.setFilePattern(Pattern.compile("^syn_$"))
+			.setFilePattern(Pattern.compile("^syn_"))
 			.setEntities(
 					"info_global_settings",
 					"info_player_coop",
